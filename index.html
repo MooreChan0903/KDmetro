@@ -1,0 +1,1923 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>地铁线路图可视化工具</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #4a6491;
+            --secondary-color: #2c3e50;
+            --light-bg: #f8f9fa;
+            --border-color: #e0e6ed;
+            --accent-color: #ffc107;
+            --transfer-color: #33A8FF;
+            --station-color: #2c3e50;
+            --start-color: #2ecc71;
+            --end-color: #e74c3c;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(90deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            padding: 20px 40px;
+            text-align: center;
+        }
+        
+        h1 {
+            margin: 0;
+            font-weight: 600;
+            font-size: 1.8rem;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        
+        h1 i { font-size: 1.5em; }
+        
+        .subtitle { font-weight: 300; margin-top: 8px; opacity: 0.9; }
+        
+        .content { display: flex; padding: 20px; gap: 20px; }
+        
+        .upload-section {
+            flex: 0 0 280px;
+            background-color: var(--light-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .visualization-section {
+            flex: 1;
+            min-height: 600px;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            background-color: #ffffff;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        }
+        
+        .file-upload { margin-bottom: 20px; }
+        
+        .file-label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 10px;
+            color: var(--secondary-color);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .file-input {
+            width: 100%;
+            padding: 12px;
+            border: 2px dashed var(--primary-color);
+            border-radius: 8px;
+            background-color: #f0f4f9;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .file-input:hover { background-color: #e3ebf5; }
+        
+        .format-info {
+            background-color: #e8f4fc;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            font-size: 0.85rem;
+        }
+        
+        .format-info h3 {
+            margin-top: 0;
+            color: var(--secondary-color);
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .format-info code {
+            background-color: #d6eaf8;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        #map-container { width: 100%; height: 100%; }
+        
+        .tooltip {
+            position: absolute;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.85);
+            color: white;
+            border-radius: 6px;
+            pointer-events: none;
+            font-size: 0.85rem;
+            z-index: 10;
+            max-width: 250px;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        }
+        
+        .station-details {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 280px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+            padding: 15px;
+            z-index: 9;
+            display: none;
+        }
+        
+        .station-details.active { display: block; }
+        
+        .station-details-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .station-details h3 {
+            margin: 0;
+            color: var(--secondary-color);
+            font-size: 1.2rem;
+        }
+        
+        .close-details {
+            background: none;
+            border: none;
+            color: #6c757d;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: color 0.2s;
+        }
+        
+        .close-details:hover { color: var(--secondary-color); }
+        
+        .station-line {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            color: white;
+            font-weight: 500;
+        }
+        
+        .station-info { margin-top: 10px; font-size: 0.9rem; }
+        .station-info p {
+            margin: 8px 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .station-info i { color: var(--primary-color); width: 16px; text-align: center; }
+        
+        .instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #6c757d;
+            max-width: 80%;
+        }
+        
+        .instructions i {
+            font-size: 3rem;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+            opacity: 0.7;
+        }
+        
+        .btn {
+            background: linear-gradient(to right, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            width: 100%;
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1); }
+        .btn:active { transform: translateY(0); }
+        
+        footer {
+            text-align: center;
+            padding: 15px;
+            color: #6c757d;
+            font-size: 0.85rem;
+            background-color: var(--light-bg);
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .controls { display: flex; gap: 8px; margin-top: 15px; }
+        
+        .zoom-btn {
+            flex: 1;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .zoom-btn:hover { background-color: var(--secondary-color); }
+
+        .route-planner {
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .route-planner h3 {
+            margin-top: 0;
+            color: var(--secondary-color);
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .select-container { margin-bottom: 12px; }
+        
+        .select-container label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85rem;
+            color: #34495e;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .select-container select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        
+        .swap-container { text-align: center; margin: -5px 0; }
+        
+        .swap-btn {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+        
+        .swap-btn:hover { background-color: var(--secondary-color); transform: rotate(180deg); }
+        
+        .route-result {
+            margin-top: 15px;
+            padding: 15px;
+            background-color: #f0f4f9;
+            border-radius: 8px;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+        
+        .route-result h4 {
+            margin-top: 0;
+            margin-bottom: 12px;
+            color: var(--secondary-color);
+            font-size: 0.95rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .route-summary {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 0.85rem;
+            margin-bottom: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px dashed var(--border-color);
+        }
+        
+        .route-summary span {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex: 1;
+            min-width: 100px;
+        }
+        
+        .route-summary i { color: var(--primary-color); }
+        
+        .route-step {
+            margin-bottom: 10px;
+            padding-left: 24px;
+            position: relative;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+        
+        .route-step:before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 5px;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+        }
+        
+        .route-step i { margin-right: 5px; width: 16px; text-align: center; }
+        
+        .route-step.transfer {
+            color: var(--end-color);
+            font-weight: 500;
+            margin: 15px 0;
+            padding-left: 24px;
+        }
+        
+        .route-tree { padding-left: 20px; margin-top: 5px; margin-bottom: 10px; }
+        
+        .route-tree-item {
+            position: relative;
+            padding-left: 20px;
+            padding-bottom: 3px;
+            font-size: 0.8rem;
+        }
+        
+        .route-tree-item:not(:last-child):before {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: -5px;
+            width: 1px;
+            background-color: #bdc3c7;
+        }
+        
+        .route-tree-item:after {
+            content: "";
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 8px;
+            height: 1px;
+            background-color: #bdc3c7;
+        }
+        
+        .route-tree-item.start-station { color: var(--start-color); font-weight: 500; }
+        .route-tree-item.end-station { color: var(--end-color); font-weight: 500; }
+        
+        .station-label {
+            font-size: 11px;
+            fill: var(--secondary-color);
+            text-anchor: start;
+            dominant-baseline: middle;
+        }
+        
+        /* ===== 路径高亮样式 =====
+           只画白色小圆点动画，不覆盖下方线路颜色，
+           这样每条线路自身的颜色仍然清晰可见。 */
+        .path-highlight {
+            stroke: #ffffff;
+            stroke-width: 5;
+            stroke-dasharray: 0, 16;   /* 0 长度虚线 + 圆头端点 = 圆点 */
+            stroke-linecap: round;
+            fill: none;
+            pointer-events: none;
+            filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.55));
+            animation: dash 1.1s linear infinite;
+        }
+        
+        /* dashoffset 递减 => 圆点沿路径从起点向终点流动 */
+        @keyframes dash {
+            from { stroke-dashoffset: 0; }
+            to   { stroke-dashoffset: -16; }
+        }
+        
+        .station-on-route {
+            stroke: var(--accent-color) !important;
+            stroke-width: 3 !important;
+        }
+        
+        .station-start {
+            stroke: var(--start-color) !important;
+            stroke-width: 3 !important;
+        }
+        
+        .station-end {
+            stroke: var(--end-color) !important;
+            stroke-width: 3 !important;
+        }
+        
+        .station-selected {
+            stroke: var(--accent-color) !important;
+            stroke-width: 4 !important;
+            r: 10 !important;
+        }
+        
+        .faded { opacity: 0.15 !important; }
+        
+        .line-filter {
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        .line-filter h3 {
+            margin-top: 0;
+            color: var(--secondary-color);
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .line-selector {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid #bdc3c7;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            margin-bottom: 10px;
+        }
+        
+        .time-info { color: #2980b9; font-weight: 500; margin-left: 8px; }
+        .direction-info { color: #7f8c8d; font-style: italic; }
+        .stations-count { color: #8e44ad; font-weight: 500; margin: 0 8px; }
+        
+        .error-message {
+            color: var(--end-color);
+            background-color: #fef0f0;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .line-color-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .route-strategy {
+            margin-top: 15px;
+            padding: 10px;
+            background-color: #f0f4f9;
+            border-radius: 6px;
+        }
+        
+        .route-strategy h4 {
+            margin: 0 0 8px 0;
+            font-size: 0.85rem;
+            color: var(--secondary-color);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .strategy-options { display: flex; gap: 10px; }
+        .strategy-option { flex: 1; text-align: center; }
+        .strategy-option input { margin-right: 5px; }
+        .strategy-option label { font-size: 0.8rem; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1><i class="fas fa-subway"></i>地铁线路图可视化工具</h1>
+            <div class="subtitle">上传CSV文件自动生成交互式地铁线路图</div>
+        </header>
+        
+        <div class="content">
+            <div class="upload-section">
+                <div class="file-upload">
+                    <label class="file-label"><i class="fas fa-file-csv"></i>上传地铁站点CSV文件</label>
+                    <input type="file" id="file-input" class="file-input" accept=".csv">
+                </div>
+                
+                <div class="format-info">
+                    <h3><i class="fas fa-info-circle"></i>CSV格式说明</h3>
+                    <p>每行格式：<code>线路编号,颜色代码,站点名称,X坐标,Y坐标</code></p>
+                    <p>示例：<code>1,#FF5733,北京西站,120,350</code></p>
+                </div>
+                
+                <div class="line-filter">
+                    <h3><i class="fas fa-filter"></i>线路筛选</h3>
+                    <select id="line-filter-select" class="line-selector" disabled>
+                        <option value="">显示所有线路</option>
+                    </select>
+                </div>
+                
+                <div class="route-planner">
+                    <h3><i class="fas fa-route"></i>路径规划</h3>
+                    
+                    <div class="select-container">
+                        <label for="start-line"><i class="fas fa-location-arrow"></i>出发线路</label>
+                        <select id="start-line" class="line-selector" disabled>
+                            <option value="">请选择线路</option>
+                        </select>
+                    </div>
+                    
+                    <div class="select-container">
+                        <label for="start-station"><i class="fas fa-map-marker-alt"></i>出发站点</label>
+                        <select id="start-station" class="line-selector" disabled>
+                            <option value="">请先选择线路</option>
+                        </select>
+                    </div>
+                    
+                    <div class="swap-container">
+                        <button class="swap-btn" id="swap-stations" title="交换出发站和目的站">
+                            <i class="fas fa-exchange-alt"></i>
+                        </button>
+                    </div>
+                    
+                    <div class="select-container">
+                        <label for="end-line"><i class="fas fa-map-marker-alt"></i>目的线路</label>
+                        <select id="end-line" class="line-selector" disabled>
+                            <option value="">请选择线路</option>
+                        </select>
+                    </div>
+                    
+                    <div class="select-container">
+                        <label for="end-station"><i class="fas fa-map-marker-alt"></i>目的站点</label>
+                        <select id="end-station" class="line-selector" disabled>
+                            <option value="">请先选择线路</option>
+                        </select>
+                    </div>
+                    
+                    <div class="route-strategy">
+                        <h4><i class="fas fa-sort-amount-down"></i>路径优先策略</h4>
+                        <div class="strategy-options">
+                            <div class="strategy-option">
+                                <input type="radio" id="strategy-balanced" name="route-strategy" value="balanced" checked>
+                                <label for="strategy-balanced">均衡</label>
+                            </div>
+                            <div class="strategy-option">
+                                <input type="radio" id="strategy-distance" name="route-strategy" value="distance">
+                                <label for="strategy-distance">最短距离</label>
+                            </div>
+                            <div class="strategy-option">
+                                <input type="radio" id="strategy-transfers" name="route-strategy" value="transfers">
+                                <label for="strategy-transfers">最少换乘</label>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <button class="btn" id="find-route" disabled>
+                        <i class="fas fa-search"></i>查找最佳路径
+                    </button>
+                    
+                    <div class="route-result" id="route-result"></div>
+                </div>
+                
+                <div class="controls">
+                    <button class="zoom-btn" id="zoom-in" title="放大">
+                        <i class="fas fa-search-plus"></i>
+                    </button>
+                    <button class="zoom-btn" id="zoom-out" title="缩小">
+                        <i class="fas fa-search-minus"></i>
+                    </button>
+                    <button class="zoom-btn" id="reset-view" title="重置视图">
+                        <i class="fas fa-compress-arrows-alt"></i>
+                    </button>
+                </div>
+                
+                <button class="btn" id="sample-btn">
+                    <i class="fas fa-database"></i>加载示例数据
+                </button>
+            </div>
+            
+            <div class="visualization-section">
+                <div id="map-container"></div>
+                <div class="instructions" id="instructions">
+                    <i class="fas fa-file-import"></i>
+                    <h2>请上传CSV文件</h2>
+                    <p>或点击"加载示例数据"按钮查看示例</p>
+                </div>
+                <div class="tooltip"></div>
+                
+                <div class="station-details" id="station-details">
+                    <div class="station-details-header">
+                        <h3 id="detail-station-name"></h3>
+                        <button class="close-details" id="close-details">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div id="detail-station-lines"></div>
+                    <div class="station-info">
+                        <p><i class="fas fa-subway"></i><span id="detail-line-count"></span></p>
+                        <p><i class="fas fa-exchange-alt"></i><span id="detail-is-transfer"></span></p>
+                        <p><i class="fas fa-map-marker-alt"></i><span id="detail-coordinates"></span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p><i class="fas fa-shield-alt"></i> 数据仅在本地处理，不会上传到服务器</p>
+        </footer>
+    </div>
+    <script>
+        // ===== 全局变量 =====
+        let allData = [];
+        let lineGroups = {};
+        let lineDirections = {};
+        let transform = {x: 0, y: 0, k: 1};
+        let stationsMap = {};
+        let uniqueStations = [];
+        let selectedStartStation = null;
+        let selectedEndStation = null;
+        let selectedStartLine = null;
+        let selectedEndLine = null;
+        let selectedStation = null;
+        let baseLines = {};
+        let lastActiveSelect = null;
+        let lineOffsets = {}; // 各线路绘制时的偏移量
+
+        // ===== 距离/时间/票价换算参数 =====
+        let kmPerUnit = 0.02;          // 每个地图坐标单位对应的公里数（由数据自动推算）
+        let transferPenaltyUnits = 150; // 均衡策略下一次换乘折算的等效距离
+
+        // ===== 初始化 D3 =====
+        const tooltip = d3.select('.tooltip');
+        const svg = d3.select('#map-container')
+            .append('svg')
+            .attr('width', '100%')
+            .attr('height', '100%');
+
+        const g = svg.append('g');
+        // 图层顺序（从下到上）：线路 -> 路径高亮点 -> 站点
+        const linesLayer = g.append('g').attr('class', 'lines-layer');
+        const routesLayer = g.append('g').attr('class', 'routes-layer');
+        const stationsLayer = g.append('g').attr('class', 'stations-layer');
+
+        const zoom = d3.zoom()
+            .scaleExtent([0.1, 8])
+            .on('zoom', (event) => {
+                transform = event.transform;
+                g.attr('transform', event.transform);
+            });
+        svg.call(zoom);
+
+        // ===== DOM 引用 =====
+        const startLineSelect = document.getElementById('start-line');
+        const startStationSelect = document.getElementById('start-station');
+        const endLineSelect = document.getElementById('end-line');
+        const endStationSelect = document.getElementById('end-station');
+        const findRouteBtn = document.getElementById('find-route');
+        const routeResult = document.getElementById('route-result');
+        const lineFilterSelect = document.getElementById('line-filter-select');
+        const stationDetails = document.getElementById('station-details');
+        const detailStationName = document.getElementById('detail-station-name');
+        const detailStationLines = document.getElementById('detail-station-lines');
+        const detailLineCount = document.getElementById('detail-line-count');
+        const detailIsTransfer = document.getElementById('detail-is-transfer');
+        const detailCoordinates = document.getElementById('detail-coordinates');
+        const closeDetailsBtn = document.getElementById('close-details');
+
+        // ===== 事件监听 =====
+        document.getElementById('file-input').addEventListener('change', handleFileUpload);
+        document.getElementById('sample-btn').addEventListener('click', loadSampleData);
+        document.getElementById('zoom-in').addEventListener('click', () => zoom.scaleBy(svg.transition().duration(300), 1.3));
+        document.getElementById('zoom-out').addEventListener('click', () => zoom.scaleBy(svg.transition().duration(300), 0.7));
+        document.getElementById('reset-view').addEventListener('click', resetView);
+        findRouteBtn.addEventListener('click', findOptimalPath);
+        lineFilterSelect.addEventListener('change', filterLines);
+        closeDetailsBtn.addEventListener('click', hideStationDetails);
+        document.getElementById('swap-stations').addEventListener('click', swapStartAndEnd);
+
+        startLineSelect.addEventListener('change', function() {
+            selectedStartLine = this.value;
+            populateStationsForLine(selectedStartLine, startStationSelect);
+            if (selectedStartStation && !getStationsForLine(selectedStartLine).includes(selectedStartStation)) {
+                startStationSelect.value = "";
+                selectedStartStation = null;
+            }
+            updateSelectedStationsVisual();
+        });
+
+        endLineSelect.addEventListener('change', function() {
+            selectedEndLine = this.value;
+            populateStationsForLine(selectedEndLine, endStationSelect);
+            if (selectedEndStation && !getStationsForLine(selectedEndLine).includes(selectedEndStation)) {
+                endStationSelect.value = "";
+                selectedEndStation = null;
+            }
+            updateSelectedStationsVisual();
+        });
+
+        startStationSelect.addEventListener('change', function() {
+            selectedStartStation = this.value;
+            updateSelectedStationsVisual();
+        });
+
+        endStationSelect.addEventListener('change', function() {
+            selectedEndStation = this.value;
+            updateSelectedStationsVisual();
+        });
+
+        startLineSelect.addEventListener('focus', () => { lastActiveSelect = 'start-line'; });
+        startStationSelect.addEventListener('focus', () => { lastActiveSelect = 'start-station'; });
+        endLineSelect.addEventListener('focus', () => { lastActiveSelect = 'end-line'; });
+        endStationSelect.addEventListener('focus', () => { lastActiveSelect = 'end-station'; });
+
+        // ===== 交换出发站与目的站 =====
+        function swapStartAndEnd() {
+            const tempLine = startLineSelect.value;
+            const tempStation = startStationSelect.value;
+
+            startLineSelect.value = endLineSelect.value;
+            endLineSelect.value = tempLine;
+
+            const tempStartStation = selectedStartStation;
+            const tempEndStation = selectedEndStation;
+
+            startStationSelect.value = endStationSelect.value;
+            endStationSelect.value = tempStation;
+
+            selectedStartLine = startLineSelect.value;
+            selectedEndLine = endLineSelect.value;
+            selectedStartStation = tempEndStation;
+            selectedEndStation = tempStartStation;
+
+            populateStationsForLine(selectedStartLine, startStationSelect);
+            populateStationsForLine(selectedEndLine, endStationSelect);
+
+            if (selectedStartStation && !getStationsForLine(selectedStartLine).includes(selectedStartStation)) {
+                startStationSelect.value = "";
+                selectedStartStation = null;
+            }
+            if (selectedEndStation && !getStationsForLine(selectedEndLine).includes(selectedEndStation)) {
+                endStationSelect.value = "";
+                selectedEndStation = null;
+            }
+
+            if (selectedStartStation) startStationSelect.value = selectedStartStation;
+            if (selectedEndStation) endStationSelect.value = selectedEndStation;
+
+            updateSelectedStationsVisual();
+        }
+
+        // ===== 获取指定线路所有站点 =====
+        function getStationsForLine(lineNum) {
+            if (!lineNum || !lineGroups[lineNum]) return [];
+            return lineGroups[lineNum].stations.map(s => s.name);
+        }
+
+        // ===== 为指定线路填充站点选择框 =====
+        function populateStationsForLine(lineNum, selectElement) {
+            selectElement.innerHTML = '';
+
+            if (!lineNum || !lineGroups[lineNum]) {
+                const option = document.createElement('option');
+                option.value = "";
+                option.textContent = "请先选择线路";
+                selectElement.appendChild(option);
+                selectElement.disabled = true;
+                return;
+            }
+
+            selectElement.disabled = false;
+
+            const defaultOption = document.createElement('option');
+            defaultOption.value = "";
+            defaultOption.textContent = "请选择站点";
+            selectElement.appendChild(defaultOption);
+
+            const direction = lineDirections[lineNum];
+            let directionText = direction ? `（${direction.start} → ${direction.end}）` : "";
+
+            const directionOption = document.createElement('option');
+            directionOption.value = "";
+            directionOption.disabled = true;
+            directionOption.textContent = `线路方向: ${directionText}`;
+            selectElement.appendChild(directionOption);
+
+            const groupHeader = document.createElement('option');
+            groupHeader.value = "";
+            groupHeader.disabled = true;
+            groupHeader.textContent = "—— 站点列表 ——";
+            selectElement.appendChild(groupHeader);
+
+            lineGroups[lineNum].stations.forEach(station => {
+                const option = document.createElement('option');
+                option.value = station.name;
+                option.textContent = station.name;
+                selectElement.appendChild(option);
+            });
+        }
+
+        // ===== 文件上传 =====
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) { processCSVData(e.target.result); };
+            reader.readAsText(file);
+        }
+
+        // ===== 处理 CSV =====
+        function processCSVData(csvText) {
+            allData = [];
+            lineGroups = {};
+            lineDirections = {};
+            stationsMap = {};
+            uniqueStations = [];
+            selectedStartStation = null;
+            selectedEndStation = null;
+            selectedStartLine = null;
+            selectedEndLine = null;
+            selectedStation = null;
+            baseLines = {};
+            lastActiveSelect = null;
+
+            const lines = csvText.split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                const parts = line.split(',');
+                if (parts.length < 5) continue;
+
+                const lineNum = parts[0].trim();
+                const color = parts[1].trim();
+                const stationName = parts[2].trim();
+                const x = parseFloat(parts[3]);
+                const y = parseFloat(parts[4]);
+                if (isNaN(x) || isNaN(y)) continue;
+
+                allData.push({ lineNum, color, stationName, x, y, originalX: x, originalY: y });
+
+                if (!lineGroups[lineNum]) lineGroups[lineNum] = { color, stations: [] };
+                lineGroups[lineNum].stations.push({
+                    name: stationName, x, y, originalX: x, originalY: y, lineNum
+                });
+
+                if (!stationsMap[stationName]) {
+                    stationsMap[stationName] = {
+                        name: stationName, x, y,
+                        lines: new Set(),
+                        coordinates: `${x},${y}`,
+                        originalCoordinates: `${x},${y}`
+                    };
+                    uniqueStations.push(stationName);
+                }
+                stationsMap[stationName].lines.add(lineNum);
+                stationsMap[stationName].color = color;
+
+                const baseLineNum = getBaseLineNum(lineNum);
+                if (!baseLines[baseLineNum]) {
+                    baseLines[baseLineNum] = {
+                        color,
+                        subLines: new Set([lineNum]),
+                        allStations: new Set([stationName]),
+                        directions: new Set()
+                    };
+                } else {
+                    baseLines[baseLineNum].subLines.add(lineNum);
+                    baseLines[baseLineNum].allStations.add(stationName);
+                }
+            }
+
+            // 计算方向
+            for (const lineNum in lineGroups) {
+                if (lineGroups[lineNum].stations.length >= 2) {
+                    const firstStation = lineGroups[lineNum].stations[0].name;
+                    const lastStation = lineGroups[lineNum].stations[lineGroups[lineNum].stations.length - 1].name;
+                    lineDirections[lineNum] = { start: firstStation, end: lastStation };
+                    const baseLineNum = getBaseLineNum(lineNum);
+                    baseLines[baseLineNum].directions.add(`${firstStation}-${lastStation}`);
+                }
+            }
+
+            if (allData.length > 0) {
+                computeDistanceScale();
+                document.getElementById('instructions').style.display = 'none';
+                updateLineSelects();
+                updateLineFilterSelect();
+                enableRoutePlanning();
+                drawMetroMap();
+            }
+        }
+
+        // ===== 更新线路选择框 =====
+        function updateLineSelects() {
+            startLineSelect.innerHTML = '<option value="">请选择线路</option>';
+            endLineSelect.innerHTML = '<option value="">请选择线路</option>';
+            startStationSelect.innerHTML = '<option value="">请先选择线路</option>';
+            startStationSelect.disabled = true;
+            endStationSelect.innerHTML = '<option value="">请先选择线路</option>';
+            endStationSelect.disabled = true;
+
+            const lineNumbers = Object.keys(lineGroups).sort((a, b) => {
+                const numA = parseInt(a), numB = parseInt(b);
+                if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                return a.localeCompare(b);
+            });
+
+            lineNumbers.forEach(lineNum => {
+                const color = lineGroups[lineNum].color;
+                const option1 = document.createElement('option');
+                option1.value = lineNum;
+                option1.innerHTML = `<span class="line-color-indicator" style="background-color: ${color};"></span>${lineNum}号线`;
+                startLineSelect.appendChild(option1);
+
+                const option2 = document.createElement('option');
+                option2.value = lineNum;
+                option2.innerHTML = `<span class="line-color-indicator" style="background-color: ${color};"></span>${lineNum}号线`;
+                endLineSelect.appendChild(option2);
+            });
+        }
+
+        function getBaseLineNum(lineNum) {
+            return lineNum.replace(/[AB]$/, '');
+        }
+
+        // ===== 计算距离比例尺 =====
+        function computeDistanceScale() {
+            const gaps = [];
+            for (const lineNum in lineGroups) {
+                const stations = lineGroups[lineNum].stations;
+                for (let i = 0; i < stations.length - 1; i++) {
+                    const d = Math.sqrt(
+                        Math.pow(stations[i].x - stations[i + 1].x, 2) +
+                        Math.pow(stations[i].y - stations[i + 1].y, 2)
+                    );
+                    if (d > 0) gaps.push(d);
+                }
+            }
+
+            if (gaps.length === 0) {
+                kmPerUnit = 0.02;
+            } else {
+                gaps.sort((a, b) => a - b);
+                const median = gaps[Math.floor(gaps.length / 2)];
+                const avg = gaps.reduce((s, d) => s + d, 0) / gaps.length;
+                const referenceGap = median > 0 ? median : avg;
+                kmPerUnit = 1.2 / referenceGap;
+            }
+            transferPenaltyUnits = 3 / kmPerUnit;
+        }
+
+        // ===== 更新线路筛选框 =====
+        function updateLineFilterSelect() {
+            lineFilterSelect.innerHTML = '<option value="">显示所有线路</option>';
+            lineFilterSelect.disabled = false;
+
+            const baseLineNumbers = Object.keys(baseLines).sort((a, b) => {
+                const numA = parseInt(a), numB = parseInt(b);
+                if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+                return a.localeCompare(b);
+            });
+
+            baseLineNumbers.forEach(baseLineNum => {
+                const option = document.createElement('option');
+                option.value = baseLineNum;
+                option.textContent = `${baseLineNum}号线`;
+                lineFilterSelect.appendChild(option);
+            });
+        }
+
+        function enableRoutePlanning() {
+            startLineSelect.disabled = false;
+            endLineSelect.disabled = false;
+            findRouteBtn.disabled = false;
+            document.getElementById('swap-stations').disabled = false;
+        }
+
+        // ===== 绘制地铁图 =====
+        // 关键点：每条线路拆成"相邻站点之间的独立小线段"，
+        // 后续路径高亮时，可以精确控制只高亮乘坐的那几段，
+        // 而同一条线路未经过的区段仍可淡化。
+        function drawMetroMap() {
+            linesLayer.selectAll('*').remove();
+            stationsLayer.selectAll('*').remove();
+            routesLayer.selectAll('*').remove();
+            hideStationDetails();
+
+            const xValues = allData.map(d => d.x);
+            const yValues = allData.map(d => d.y);
+            const minX = Math.min(...xValues);
+            const maxX = Math.max(...xValues);
+            const minY = Math.min(...yValues);
+            const maxY = Math.max(...yValues);
+
+            const width = maxX - minX;
+            const height = maxY - minY;
+            const padding = 50;
+
+            svg.attr('viewBox',
+                `${minX - padding} ${minY - padding} ${width + 2 * padding} ${height + 2 * padding}`);
+
+            // 为每条线路计算不同偏移角度（避免重合覆盖）
+            const lineNumbers = Object.keys(lineGroups);
+            const offsetDistance = 5;
+            lineOffsets = {};
+            lineNumbers.forEach((lineNum, index) => {
+                const angle = (index * (360 / lineNumbers.length)) % 360;
+                lineOffsets[lineNum] = {
+                    dx: Math.cos(angle * Math.PI / 180) * offsetDistance,
+                    dy: Math.sin(angle * Math.PI / 180) * offsetDistance
+                };
+            });
+
+            // ---- 逐段绘制线路 ----
+            for (const lineNum in lineGroups) {
+                const lineData = lineGroups[lineNum];
+                const offset = lineOffsets[lineNum];
+                const baseLineNum = getBaseLineNum(lineNum);
+
+                for (let i = 0; i < lineData.stations.length - 1; i++) {
+                    const s1 = lineData.stations[i];
+                    const s2 = lineData.stations[i + 1];
+
+                    linesLayer.append('line')
+                        .attr('x1', s1.x + offset.dx)
+                        .attr('y1', s1.y + offset.dy)
+                        .attr('x2', s2.x + offset.dx)
+                        .attr('y2', s2.y + offset.dy)
+                        .attr('stroke', lineData.color)
+                        .attr('stroke-width', 8)
+                        .attr('stroke-linecap', 'round')
+                        .attr('opacity', 0.85)
+                        .attr('data-line', lineNum)
+                        .attr('data-base-line', baseLineNum)
+                        .attr('data-from', s1.name)
+                        .attr('data-to', s2.name);
+                }
+
+                // 线路标签（只在基础线路的第一条分支上放一个）
+                if (lineData.stations.length > 0 &&
+                    lineNum === Array.from(baseLines[baseLineNum].subLines).sort()[0]) {
+                    const firstStation = lineData.stations[0];
+                    linesLayer.append('text')
+                        .attr('x', firstStation.x + offset.dx)
+                        .attr('y', firstStation.y + offset.dy - 15)
+                        .text(`${baseLineNum}号线`)
+                        .attr('fill', lineData.color)
+                        .attr('font-weight', 'bold')
+                        .attr('font-size', '16px')
+                        .attr('text-anchor', 'middle')
+                        .attr('data-line', lineNum)
+                        .attr('data-base-line', baseLineNum);
+                }
+            }
+
+            // ---- 换乘站识别 ----
+            const transferStations = {};
+            allData.forEach(station => {
+                const key = `${station.originalX},${station.originalY}`;
+                if (!transferStations[key]) {
+                    transferStations[key] = { name: station.stationName, baseLines: new Set() };
+                }
+                transferStations[key].baseLines.add(getBaseLineNum(station.lineNum));
+            });
+
+            // ---- 绘制站点 ----
+            const uniqueStationsDrawn = new Set();
+            allData.forEach(station => {
+                if (uniqueStationsDrawn.has(station.stationName)) return;
+                uniqueStationsDrawn.add(station.stationName);
+
+                const transferInfo = transferStations[`${station.originalX},${station.originalY}`];
+                const isTransfer = transferInfo.baseLines.size > 1;
+
+                stationsLayer.append('circle')
+                    .attr('cx', station.originalX)
+                    .attr('cy', station.originalY)
+                    .attr('r', isTransfer ? 8 : 6)
+                    .attr('fill', isTransfer ? '#33A8FF' : '#2c3e50')
+                    .attr('stroke', 'white')
+                    .attr('stroke-width', 2)
+                    .attr('cursor', 'pointer')
+                    .attr('data-station', station.stationName)
+                    .attr('data-is-transfer', isTransfer)
+                    .attr('data-lines', Array.from(transferInfo.baseLines).join(','))
+                    .on('mouseover', function(event) {
+                        const lines = Array.from(transferInfo.baseLines).map(l => `${l}号线`).join(', ');
+                        tooltip.style('display', 'block')
+                            .html(`<strong>${station.stationName}</strong><br><i class="fas fa-subway"></i> ${lines}`)
+                            .style('left', (event.pageX + 15) + 'px')
+                            .style('top', (event.pageY - 15) + 'px');
+
+                        if (station.stationName !== selectedStartStation &&
+                            station.stationName !== selectedEndStation &&
+                            station.stationName !== selectedStation) {
+                            d3.select(this)
+                                .attr('r', isTransfer ? 12 : 10)
+                                .attr('fill', isTransfer ? '#FFA726' : '#4CAF50');
+                        }
+                    })
+                    .on('mouseout', function() {
+                        tooltip.style('display', 'none');
+                        const stationName = d3.select(this).attr('data-station');
+                        if (stationName !== selectedStartStation &&
+                            stationName !== selectedEndStation &&
+                            stationName !== selectedStation) {
+                            d3.select(this)
+                                .attr('r', isTransfer ? 8 : 6)
+                                .attr('fill', isTransfer ? '#33A8FF' : '#2c3e50');
+                        }
+                    })
+                    .on('click', function() {
+                        stationsLayer.selectAll('circle').classed('station-selected', false);
+                        const stationName = d3.select(this).attr('data-station');
+                        showStationDetails(stationName);
+                        const stationLines = Array.from(stationsMap[stationName].lines);
+
+                        if (lastActiveSelect === 'start-line' || lastActiveSelect === 'start-station') {
+                            const lineNum = stationLines[0];
+                            startLineSelect.value = lineNum;
+                            selectedStartLine = lineNum;
+                            populateStationsForLine(lineNum, startStationSelect);
+                            startStationSelect.value = stationName;
+                            selectedStartStation = stationName;
+                            if (endStationSelect.value === stationName) {
+                                endStationSelect.value = "";
+                                selectedEndStation = null;
+                            }
+                        } else if (lastActiveSelect === 'end-line' || lastActiveSelect === 'end-station') {
+                            const lineNum = stationLines[0];
+                            endLineSelect.value = lineNum;
+                            selectedEndLine = lineNum;
+                            populateStationsForLine(lineNum, endStationSelect);
+                            endStationSelect.value = stationName;
+                            selectedEndStation = stationName;
+                            if (startStationSelect.value === stationName) {
+                                startStationSelect.value = "";
+                                selectedStartStation = null;
+                            }
+                        } else {
+                            if (!startStationSelect.value || startStationSelect.value === stationName) {
+                                const lineNum = stationLines[0];
+                                startLineSelect.value = lineNum;
+                                selectedStartLine = lineNum;
+                                populateStationsForLine(lineNum, startStationSelect);
+                                startStationSelect.value = stationName;
+                                selectedStartStation = stationName;
+                                if (endStationSelect.value === stationName) {
+                                    endStationSelect.value = "";
+                                    selectedEndStation = null;
+                                }
+                            } else {
+                                const lineNum = stationLines[0];
+                                endLineSelect.value = lineNum;
+                                selectedEndLine = lineNum;
+                                populateStationsForLine(lineNum, endStationSelect);
+                                endStationSelect.value = stationName;
+                                selectedEndStation = stationName;
+                            }
+                        }
+                        updateSelectedStationsVisual();
+                    });
+
+                // 站点名称标签
+                stationsLayer.append('text')
+                    .attr('x', station.originalX + 10)
+                    .attr('y', station.originalY - 10)
+                    .text(station.stationName)
+                    .attr('class', 'station-label')
+                    .attr('transform', `rotate(-45, ${station.originalX + 10}, ${station.originalY - 10})`)
+                    .attr('data-station', station.stationName)
+                    .attr('data-lines', Array.from(transferInfo.baseLines).join(','));
+            });
+
+            resetView();
+        }
+
+        // ===== 站点详情 =====
+        function showStationDetails(stationName) {
+            const station = stationsMap[stationName];
+            if (!station) return;
+            selectedStation = stationName;
+            detailStationName.textContent = stationName;
+            detailStationLines.innerHTML = '';
+
+            station.lines.forEach(lineNum => {
+                const baseLineNum = getBaseLineNum(lineNum);
+                const color = lineGroups[lineNum].color;
+                const lineElement = document.createElement('span');
+                lineElement.className = 'station-line';
+                lineElement.style.backgroundColor = color;
+                lineElement.textContent = `${baseLineNum}号线`;
+                detailStationLines.appendChild(lineElement);
+            });
+
+            detailLineCount.textContent = `共${station.lines.size}条线路经过`;
+            detailIsTransfer.textContent = station.lines.size > 1 ? '换乘站' : '普通站';
+            detailCoordinates.textContent = `坐标: ${station.coordinates}`;
+            stationDetails.classList.add('active');
+            updateSelectedStationsVisual();
+        }
+
+        function hideStationDetails() {
+            stationDetails.classList.remove('active');
+            selectedStation = null;
+            updateSelectedStationsVisual();
+        }
+
+        function updateSelectedStationsVisual() {
+            stationsLayer.selectAll('circle')
+                .classed('station-start', false)
+                .classed('station-end', false)
+                .classed('station-selected', false)
+                .each(function() {
+                    const circle = d3.select(this);
+                    const isTransfer = circle.attr('data-is-transfer') === 'true';
+                    circle.attr('r', isTransfer ? 8 : 6);
+                    circle.attr('fill', isTransfer ? '#33A8FF' : '#2c3e50');
+                });
+
+            if (selectedStartStation) {
+                stationsLayer.select(`circle[data-station="${selectedStartStation}"]`)
+                    .classed('station-start', true).attr('r', 10);
+            }
+            if (selectedEndStation) {
+                stationsLayer.select(`circle[data-station="${selectedEndStation}"]`)
+                    .classed('station-end', true).attr('r', 10);
+            }
+            if (selectedStation) {
+                stationsLayer.select(`circle[data-station="${selectedStation}"]`)
+                    .classed('station-selected', true);
+            }
+        }
+
+        // ===== 线路筛选 =====
+        function filterLines() {
+            const selectedBaseLine = this.value;
+
+            linesLayer.selectAll('line, text').classed('faded', false);
+            stationsLayer.selectAll('circle, text').classed('faded', false);
+            stationsLayer.selectAll('circle').classed('station-on-route', false);
+            routesLayer.selectAll('*').remove();
+
+            if (selectedBaseLine) {
+                linesLayer.selectAll('line').each(function() {
+                    const lineBaseLine = d3.select(this).attr('data-base-line');
+                    if (lineBaseLine !== selectedBaseLine) d3.select(this).classed('faded', true);
+                });
+                linesLayer.selectAll('text').each(function() {
+                    const lineBaseLine = d3.select(this).attr('data-base-line');
+                    if (lineBaseLine !== selectedBaseLine) d3.select(this).classed('faded', true);
+                });
+                stationsLayer.selectAll('circle').each(function() {
+                    const stationLines = d3.select(this).attr('data-lines').split(',');
+                    if (!stationLines.includes(selectedBaseLine)) d3.select(this).classed('faded', true);
+                });
+                stationsLayer.selectAll('text.station-label').each(function() {
+                    const stationLines = d3.select(this).attr('data-lines').split(',');
+                    if (!stationLines.includes(selectedBaseLine)) d3.select(this).classed('faded', true);
+                });
+            }
+        }
+
+        // ===== 构建图结构 =====
+        function buildGraph() {
+            const graph = {};
+            uniqueStations.forEach(station => { graph[station] = {}; });
+
+            for (const lineNum in lineGroups) {
+                const stations = lineGroups[lineNum].stations;
+                for (let i = 0; i < stations.length - 1; i++) {
+                    const station1 = stations[i].name;
+                    const station2 = stations[i + 1].name;
+                    const distance = Math.sqrt(
+                        Math.pow(stations[i].x - stations[i + 1].x, 2) +
+                        Math.pow(stations[i].y - stations[i + 1].y, 2)
+                    );
+                    const baseLineNum = getBaseLineNum(lineNum);
+
+                    graph[station1][station2] = { weight: distance, line: lineNum, baseLine: baseLineNum, distance };
+                    graph[station2][station1] = { weight: distance, line: lineNum, baseLine: baseLineNum, distance };
+                }
+            }
+            return graph;
+        }
+
+        // ===== 判断两站是否同基础线路 =====
+        function areStationsOnSameLine(startStation, endStation) {
+            if (!startStation || !endStation || !stationsMap[startStation] || !stationsMap[endStation]) return null;
+            const startLines = new Set(stationsMap[startStation].lines);
+            const endLines = new Set(stationsMap[endStation].lines);
+            for (const line of startLines) {
+                const baseLine = getBaseLineNum(line);
+                for (const endLine of endLines) {
+                    if (getBaseLineNum(endLine) === baseLine) {
+                        return { baseLine, startLine: line, endLine };
+                    }
+                }
+            }
+            return null;
+        }
+
+        // ===== 直达路径 =====
+        function findDirectPathOnLine(lineNum, startStation, endStation) {
+            if (!lineGroups[lineNum]) return null;
+            const stations = lineGroups[lineNum].stations.map(s => s.name);
+            const startIndex = stations.indexOf(startStation);
+            const endIndex = stations.indexOf(endStation);
+            if (startIndex === -1 || endIndex === -1) return null;
+
+            const isForward = startIndex < endIndex;
+            let pathStations = isForward
+                ? stations.slice(startIndex, endIndex + 1)
+                : stations.slice(endIndex, startIndex + 1).reverse();
+
+            let totalDistance = 0;
+            const segments = [];
+            for (let i = 0; i < pathStations.length - 1; i++) {
+                const from = pathStations[i];
+                const to = pathStations[i + 1];
+                const fromStation = lineGroups[lineNum].stations.find(s => s.name === from);
+                const toStation = lineGroups[lineNum].stations.find(s => s.name === to);
+                if (fromStation && toStation) {
+                    const distance = Math.sqrt(
+                        Math.pow(fromStation.x - toStation.x, 2) +
+                        Math.pow(fromStation.y - toStation.y, 2)
+                    );
+                    totalDistance += distance;
+                    segments.push({ from, to, line: lineNum, baseLine: getBaseLineNum(lineNum), distance });
+                }
+            }
+            return { path: pathStations, segments, totalDistance, transferCount: 0 };
+        }
+
+        // ===== 行驶时间（基于公里数） =====
+        function calculateTravelTime(distanceUnits) {
+            const km = distanceUnits * kmPerUnit;
+            const minutes = (km / 35) * 60; // 平均旅速 35 km/h
+            return Math.max(1, minutes);
+        }
+
+        // ===== 换乘时间 =====
+        function calculateTransferTime(stationName) {
+            const station = stationsMap[stationName];
+            if (!station) return 3;
+            const lineCount = station.lines.size;
+            if (lineCount <= 2) return 3;
+            if (lineCount <= 3) return 4;
+            return 5;
+        }
+
+        // ===== 格式化时间 =====
+        function formatTime(minutes) {
+            const total = Math.round(minutes);
+            if (total >= 60) {
+                const h = Math.floor(total / 60);
+                const m = total % 60;
+                return m > 0 ? `${h}小时${m}分钟` : `${h}小时`;
+            }
+            return `${total}分钟`;
+        }
+
+        // ===== 加权 Dijkstra =====
+        function weightedDijkstra(graph, start, end, strategy = 'balanced') {
+            const distances = {}, transfers = {}, predecessors = {};
+            const nodes = Object.keys(graph);
+
+            nodes.forEach(node => {
+                distances[node] = Infinity;
+                transfers[node] = Infinity;
+                predecessors[node] = null;
+            });
+            distances[start] = 0;
+            transfers[start] = 0;
+
+            while (nodes.length) {
+                let bestNode = null;
+
+                if (strategy === 'distance') {
+                    nodes.forEach(node => {
+                        if (bestNode === null || distances[node] < distances[bestNode]) bestNode = node;
+                    });
+                } else if (strategy === 'transfers') {
+                    nodes.forEach(node => {
+                        if (bestNode === null) bestNode = node;
+                        else if (transfers[node] < transfers[bestNode]) bestNode = node;
+                        else if (transfers[node] === transfers[bestNode] && distances[node] < distances[bestNode]) bestNode = node;
+                    });
+                } else {
+                    const tw = transferPenaltyUnits;
+                    nodes.forEach(node => {
+                        if (bestNode === null) bestNode = node;
+                        else {
+                            const curCost = distances[bestNode] + transfers[bestNode] * tw;
+                            const newCost = distances[node] + transfers[node] * tw;
+                            if (newCost < curCost) bestNode = node;
+                        }
+                    });
+                }
+
+                if (bestNode === end) break;
+                if (bestNode === null || distances[bestNode] === Infinity) break;
+
+                const index = nodes.indexOf(bestNode);
+                nodes.splice(index, 1);
+
+                const neighbors = Object.keys(graph[bestNode]);
+                neighbors.forEach(neighbor => {
+                    if (!nodes.includes(neighbor)) return;
+                    const edge = graph[bestNode][neighbor];
+                    const newDistance = distances[bestNode] + edge.weight;
+
+                    let newTransfers = transfers[bestNode];
+                    if (predecessors[bestNode] && predecessors[bestNode].baseLine !== edge.baseLine) {
+                        newTransfers += 1;
+                    }
+
+                    let shouldUpdate = false;
+                    if (strategy === 'distance') {
+                        shouldUpdate = newDistance < distances[neighbor];
+                    } else if (strategy === 'transfers') {
+                        if (newTransfers < transfers[neighbor]) shouldUpdate = true;
+                        else if (newTransfers === transfers[neighbor] && newDistance < distances[neighbor]) shouldUpdate = true;
+                    } else {
+                        const tw = transferPenaltyUnits;
+                        const curCost = distances[neighbor] + transfers[neighbor] * tw;
+                        const newCost = newDistance + newTransfers * tw;
+                        shouldUpdate = newCost < curCost;
+                    }
+
+                    if (shouldUpdate) {
+                        distances[neighbor] = newDistance;
+                        transfers[neighbor] = newTransfers;
+                        predecessors[neighbor] = {
+                            node: bestNode,
+                            line: edge.line,
+                            baseLine: edge.baseLine,
+                            distance: edge.distance
+                        };
+                    }
+                });
+            }
+
+            const path = [], segments = [];
+            let totalDistance = 0;
+            let current = end;
+
+            if (distances[end] === Infinity) {
+                return { path: [], segments: [], totalDistance: 0, transferCount: 0 };
+            }
+
+            while (current !== null) {
+                path.unshift(current);
+                if (predecessors[current]) {
+                    segments.unshift({
+                        from: predecessors[current].node,
+                        to: current,
+                        line: predecessors[current].line,
+                        baseLine: predecessors[current].baseLine,
+                        distance: predecessors[current].distance
+                    });
+                    totalDistance += predecessors[current].distance;
+                }
+                current = predecessors[current] ? predecessors[current].node : null;
+            }
+
+            return { path, segments, totalDistance, transferCount: transfers[end] };
+        }
+
+        // ===== 票价（里程分段计价） =====
+        function calculateFare(distanceUnits) {
+            const km = distanceUnits * kmPerUnit;
+            if (km <= 6) return 3;
+            if (km <= 12) return 4;
+            if (km <= 22) return 5;
+            if (km <= 32) return 6;
+            if (km <= 52) return 7;
+            return 7 + Math.ceil((km - 52) / 20);
+        }
+
+        // ===== 查找路径 =====
+        function findOptimalPath() {
+            try {
+                document.querySelectorAll('.error-message').forEach(el => el.remove());
+
+                const start = startStationSelect.value;
+                const end = endStationSelect.value;
+
+                let strategy = 'balanced';
+                if (document.getElementById('strategy-distance').checked) strategy = 'distance';
+                else if (document.getElementById('strategy-transfers').checked) strategy = 'transfers';
+
+                if (!start) { showError("请选择出发站点"); return; }
+                if (!end) { showError("请选择目的站点"); return; }
+                if (start === end) { showError("出发站和目的站不能相同"); return; }
+                if (!stationsMap[start]) { showError(`出发站 "${start}" 不存在`); return; }
+                if (!stationsMap[end]) { showError(`目的站 "${end}" 不存在`); return; }
+
+                routesLayer.selectAll('*').remove();
+                linesLayer.selectAll('line, text').classed('faded', false);
+                stationsLayer.selectAll('circle, text').classed('faded', false);
+                stationsLayer.selectAll('circle').classed('station-on-route', false);
+
+                const sameLineInfo = areStationsOnSameLine(start, end);
+                let pathResult;
+
+                if (sameLineInfo) {
+                    if (selectedStartLine &&
+                        stationsMap[start].lines.has(selectedStartLine) &&
+                        stationsMap[end].lines.has(selectedStartLine)) {
+                        pathResult = findDirectPathOnLine(selectedStartLine, start, end);
+                    } else if (selectedEndLine &&
+                        stationsMap[start].lines.has(selectedEndLine) &&
+                        stationsMap[end].lines.has(selectedEndLine)) {
+                        pathResult = findDirectPathOnLine(selectedEndLine, start, end);
+                    } else {
+                        for (const line of stationsMap[start].lines) {
+                            if (stationsMap[end].lines.has(line)) {
+                                pathResult = findDirectPathOnLine(line, start, end);
+                                if (pathResult) break;
+                            }
+                        }
+                    }
+                }
+
+                if (!pathResult) {
+                    const graph = buildGraph();
+                    if (Object.keys(graph).length === 0) { showError("无法构建地铁线路图，请检查数据"); return; }
+                    if (!graph[start] || !graph[end]) { showError("起点或终点不在地铁网络中"); return; }
+                    pathResult = weightedDijkstra(graph, start, end, strategy);
+                }
+
+                if (!pathResult || pathResult.path.length <= 1) {
+                    showError('无法找到路径，请检查站点是否连通');
+                    return;
+                }
+
+                // 合并为 routeSegments（按基础线路分组）
+                const routeSegments = [];
+                let currentBaseLine = null;
+                let currentSegment = {
+                    line: null, baseLine: null,
+                    start: start, end: null,
+                    stations: [start],
+                    totalDistance: 0, totalTime: 0,
+                    subSegments: []
+                };
+
+                for (let i = 0; i < pathResult.segments.length; i++) {
+                    const segment = pathResult.segments[i];
+                    const segmentTime = calculateTravelTime(segment.distance);
+
+                    if (currentBaseLine === null) {
+                        currentBaseLine = segment.baseLine;
+                        currentSegment.line = segment.line;
+                        currentSegment.baseLine = segment.baseLine;
+                        currentSegment.totalDistance += segment.distance;
+                        currentSegment.totalTime += segmentTime;
+                        currentSegment.subSegments.push({
+                            from: segment.from, to: segment.to,
+                            distance: segment.distance, time: segmentTime,
+                            line: segment.line, baseLine: segment.baseLine
+                        });
+                    } else if (currentBaseLine === segment.baseLine) {
+                        currentSegment.totalDistance += segment.distance;
+                        currentSegment.totalTime += segmentTime;
+                        currentSegment.subSegments.push({
+                            from: segment.from, to: segment.to,
+                            distance: segment.distance, time: segmentTime,
+                            line: segment.line, baseLine: segment.baseLine
+                        });
+                    } else {
+                        currentSegment.end = segment.from;
+                        routeSegments.push({ ...currentSegment });
+
+                        const transferTime = calculateTransferTime(segment.from);
+                        if (routeSegments.length > 0) {
+                            routeSegments[routeSegments.length - 1].transferTime = transferTime;
+                        }
+
+                        currentBaseLine = segment.baseLine;
+                        currentSegment = {
+                            line: segment.line,
+                            baseLine: segment.baseLine,
+                            start: segment.from, end: null,
+                            stations: [segment.from],
+                            totalDistance: segment.distance,
+                            totalTime: segmentTime,
+                            subSegments: [{
+                                from: segment.from, to: segment.to,
+                                distance: segment.distance, time: segmentTime,
+                                line: segment.line, baseLine: segment.baseLine
+                            }]
+                        };
+                    }
+
+                    currentSegment.stations.push(segment.to);
+                    currentSegment.end = segment.to;
+                }
+                routeSegments.push(currentSegment);
+
+                let totalTime = 0;
+                routeSegments.forEach(seg => {
+                    totalTime += seg.totalTime;
+                    if (seg.transferTime) totalTime += seg.transferTime;
+                });
+
+                highlightPath(routeSegments, pathResult.path);
+
+                const fare = calculateFare(pathResult.totalDistance);
+
+                displayRouteDetails(routeSegments, start, end, fare, pathResult.totalDistance,
+                    pathResult.path.length - 1, totalTime, pathResult.transferCount, strategy);
+            } catch (error) {
+                console.error("查找路径时出错:", error);
+                showError(`查找路径时发生错误: ${error.message}`);
+            }
+        }
+
+        function showError(message) {
+            document.querySelectorAll('.error-message').forEach(el => el.remove());
+            const errorElement = document.createElement('div');
+            errorElement.className = 'error-message';
+            errorElement.innerHTML = `<i class="fas fa-exclamation-circle"></i>${message}`;
+            routeResult.innerHTML = '';
+            routeResult.appendChild(errorElement);
+        }
+
+        // ===== 高亮路径 =====
+        // 核心改进：
+        // 1) 只保留"乘坐的小线段"为全彩，同线路未经过的小线段同样淡化；
+        // 2) 高亮动画使用白色圆点，不遮挡底下的线路颜色。
+        function highlightPath(routeSegments, pathStations) {
+            const pathStationSet = new Set(pathStations);
+
+            // 构建乘坐线段集合（按 line + from + to 精确匹配，避免误标）
+            const rideSegments = new Set();
+            routeSegments.forEach(seg => {
+                (seg.subSegments || []).forEach(sub => {
+                    if (sub.line) {
+                        rideSegments.add(`${sub.line}|${sub.from}|${sub.to}`);
+                        rideSegments.add(`${sub.line}|${sub.to}|${sub.from}`);
+                    }
+                });
+            });
+
+            // 1) 线路小线段：只保留乘坐的那些，其余（包括同线路未经过的）全部淡化
+            linesLayer.selectAll('line').each(function() {
+                const el = d3.select(this);
+                const lineNum = el.attr('data-line');
+                const from = el.attr('data-from');
+                const to = el.attr('data-to');
+                const isRide = rideSegments.has(`${lineNum}|${from}|${to}`);
+                el.classed('faded', !isRide);
+            });
+
+            // 2) 线路标签：只保留乘坐涉及的基础线路
+            const usedBaseLines = new Set();
+            routeSegments.forEach(seg => usedBaseLines.add(seg.baseLine));
+            linesLayer.selectAll('text').each(function() {
+                const el = d3.select(this);
+                const baseLine = el.attr('data-base-line');
+                el.classed('faded', !usedBaseLines.has(baseLine));
+            });
+
+            // 3) 站点：途经站点保留，其余淡化
+            stationsLayer.selectAll('circle').each(function() {
+                const circle = d3.select(this);
+                const stationName = circle.attr('data-station');
+                circle.classed('station-on-route', false);
+
+                if (pathStationSet.has(stationName)) {
+                    circle.classed('faded', false);
+                    if (stationName !== selectedStartStation && stationName !== selectedEndStation) {
+                        circle.classed('station-on-route', true);
+                    }
+                } else {
+                    circle.classed('faded', true);
+                }
+            });
+
+            stationsLayer.selectAll('text.station-label').each(function() {
+                const stationName = d3.select(this).attr('data-station');
+                d3.select(this).classed('faded', !pathStationSet.has(stationName));
+            });
+
+            // 4) 绘制动画高亮：按 subSegments 逐段绘制（使用与线路绘制相同的偏移量，保证完全贴合）
+            routeSegments.forEach(seg => {
+                (seg.subSegments || []).forEach(sub => {
+                    const lineData = lineGroups[sub.line];
+                    if (!lineData) return;
+                    const offset = lineOffsets[sub.line] || { dx: 0, dy: 0 };
+
+                    const s1 = lineData.stations.find(s => s.name === sub.from);
+                    const s2 = lineData.stations.find(s => s.name === sub.to);
+                    if (!s1 || !s2) return;
+
+                    routesLayer.append('line')
+                        .attr('x1', s1.x + offset.dx)
+                        .attr('y1', s1.y + offset.dy)
+                        .attr('x2', s2.x + offset.dx)
+                        .attr('y2', s2.y + offset.dy)
+                        .attr('class', 'path-highlight');
+                });
+            });
+        }
+
+        // ===== 显示路径详情 =====
+        function displayRouteDetails(routeSegments, start, end, fare, totalDistance, totalStations, totalTime, transferCount, strategy) {
+            let strategyText = "";
+            switch (strategy) {
+                case "distance": strategyText = "（优先最短距离）"; break;
+                case "transfers": strategyText = "（优先最少换乘）"; break;
+                default: strategyText = "（均衡距离和换乘）";
+            }
+
+            const distanceKm = totalDistance * kmPerUnit;
+
+            let html = `<h4><i class="fas fa-directions"></i> 从 ${start} 到 ${end} ${strategyText}</h4>`;
+            html += `<div class="route-summary">
+                <span><i class="fas fa-stop"></i> ${totalStations}站</span>
+                <span><i class="fas fa-exchange-alt"></i> ${transferCount}次换乘</span>
+                <span><i class="fas fa-clock"></i> 约${formatTime(totalTime)}</span>
+                <span><i class="fas fa-ticket-alt"></i> ${fare}元</span>
+                <span><i class="fas fa-road"></i> 约${distanceKm.toFixed(1)}km</span>
+            </div>`;
+
+            const isDirectRoute = routeSegments.length === 1;
+            if (isDirectRoute) {
+                html += `<div class="route-step" style="color: #27ae60; font-weight: 500;">
+                    <i class="fas fa-check-circle"></i>同线路直达，无需换乘
+                </div>`;
+            }
+
+            routeSegments.forEach((segment, index) => {
+                const lineColor = lineGroups[segment.line].color;
+                let direction = lineDirections[segment.line];
+                if (!direction) {
+                    const baseLine = baseLines[segment.baseLine];
+                    if (baseLine && baseLine.directions.size > 0) {
+                        const firstDirection = Array.from(baseLine.directions)[0];
+                        const [dirStart, dirEnd] = firstDirection.split('-');
+                        direction = { start: dirStart, end: dirEnd };
+                    }
+                }
+
+                let directionText = '';
+                if (direction) {
+                    const lineStations = lineGroups[segment.line].stations.map(s => s.name);
+                    const startIndex = lineStations.indexOf(segment.start);
+                    const endIndex = lineStations.indexOf(segment.end);
+                    if (startIndex !== -1 && endIndex !== -1) {
+                        if (startIndex < endIndex) directionText = `(${direction.start} → ${direction.end}方向)`;
+                        else directionText = `(${direction.end} → ${direction.start}方向)`;
+                    } else {
+                        directionText = `(${direction.start} → ${direction.end}方向)`;
+                    }
+                } else {
+                    directionText = `(未指定方向)`;
+                }
+
+                const stationCount = segment.stations.length - 1;
+
+                html += `<div class="route-step">`;
+                html += `<i class="fas fa-subway"></i>`;
+                html += `<span style="display:inline-block;width:12px;height:12px;background-color:${lineColor};border-radius:50%;margin-right:5px;"></span>`;
+                html += index === 0
+                    ? `乘坐 ${segment.baseLine}号线 <span class="direction-info">${directionText}</span>`
+                    : `换乘 ${segment.baseLine}号线 <span class="direction-info">${directionText}</span>`;
+                html += `<span class="stations-count">${stationCount}站</span>`;
+                html += `<span class="time-info">(${formatTime(segment.totalTime)})</span>`;
+                html += `</div>`;
+
+                html += `<div class="route-tree">`;
+                segment.stations.forEach((station, i) => {
+                    let stationClass = '';
+                    if (station === start && index === 0 && i === 0) stationClass = 'start-station';
+                    else if (station === end && index === routeSegments.length - 1 && i === segment.stations.length - 1) stationClass = 'end-station';
+                    html += `<div class="route-tree-item ${stationClass}">${station}</div>`;
+                });
+                html += `</div>`;
+
+                if (index < routeSegments.length - 1) {
+                    const transferStation = segment.end;
+                    const transferTime = segment.transferTime || 3;
+                    html += `<div class="route-step transfer">
+                        <i class="fas fa-exchange-alt"></i>在 ${transferStation} 换乘
+                        <span class="time-info">(约${formatTime(transferTime)})</span>
+                    </div>`;
+                }
+            });
+
+            routeResult.innerHTML = html;
+        }
+
+        // ===== 示例数据 =====
+        function loadSampleData() {
+            const sampleData = `1,#FF5733,北京西站,100,300
+1,#FF5733,军事博物馆,180,250
+1,#FF5733,木樨地,250,220
+1,#FF5733,南礼士路,320,200
+1,#FF5733,复兴门,400,200
+1,#FF5733,西单,480,220
+1,#FF5733,天安门西,550,250
+1,#FF5733,天安门东,620,280
+1,#FF5733,王府井,700,300
+1,#FF5733,东单,780,320
+1,#FF5733,建国门,850,350
+1,#FF5733,永安里,900,380
+1,#FF5733,国贸,950,410
+1,#FF5733,大望路,1000,450
+2,#33A8FF,西直门,200,350
+2,#33A8FF,车公庄,280,320
+2,#33A8FF,阜成门,350,300
+2,#33A8FF,复兴门,400,200
+2,#33A8FF,长椿街,450,250
+2,#33A8FF,宣武门,500,280
+2,#33A8FF,和平门,550,300
+2,#33A8FF,前门,600,320
+2,#33A8FF,崇文门,650,350
+2,#33A8FF,北京站,700,380
+2,#33A8FF,建国门,850,350
+2,#33A8FF,朝阳门,900,320
+2,#33A8FF,东四十条,950,290
+2,#33A8FF,东直门,1000,260
+4,#8E44AD,海淀黄庄,300,100
+4,#8E44AD,人民大学,350,150
+4,#8E44AD,魏公村,400,200
+4,#8E44AD,国家图书馆,450,250
+4,#8E44AD,动物园,380,300
+4,#8E44AD,西直门,200,350
+4A,#8E44AD,安河桥北,200,50
+4A,#8E44AD,北宫门,250,80
+4A,#8E44AD,西苑,280,95
+4A,#8E44AD,海淀黄庄,300,100`;
+            document.getElementById('instructions').style.display = 'none';
+            processCSVData(sampleData);
+        }
+
+        // ===== 重置视图 =====
+        function resetView() {
+            linesLayer.selectAll('line, text').classed('faded', false);
+            stationsLayer.selectAll('circle, text').classed('faded', false);
+            stationsLayer.selectAll('circle').classed('station-on-route', false);
+            routesLayer.selectAll('*').remove();
+
+            svg.transition()
+                .duration(500)
+                .call(zoom.transform, d3.zoomIdentity);
+        }
+    </script>
+</body>
+</html>
